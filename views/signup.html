@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>注册</title>
+</head>
+<body>
+
+<h2 style="color: red;">{{.msg}}</h2><br />
+
+    <form action="/user/signup" method="post">
+        <label for="userName">用户名：</label><br />
+        <input type="text" name="userName" value="" /><br />
+
+        <label for="password1">密码：</label><br />
+        <input type="password" name="password1" value="" /><br/>
+        <label for="password2">确认密码：</label><br />
+        <input type="password" name="password2" value="" /><br/>
+
+        <label for="email">电子邮箱：</label><br />
+        <input type="text" name="email" value="" /><br />
+
+        <label for="company">所在公司：</label><br />
+        <input type="text" name="company" value="" /><br />
+
+        <input type="submit" value="提交注册" />
+    </form>
+
+</body>
+</html>

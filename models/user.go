@@ -1,5 +1,11 @@
 package models
 
+import (
+	"fmt"
+	"github.com/pkg/errors"
+	"strconv"
+)
+
 //User 系统用户
 //redis存储结构
 //user:seq - string Id序列值
@@ -13,8 +19,135 @@ type User struct {
 	Username string
 	Password string
 	Email    string
-
 	Company string
 
 	Contactors []User
+}
+
+const (
+	PREFIX="user:"
+	SEQ=PREFIX+"seq"
+	UN2ID="un2id"
+	EMAIL2ID="email2id"
+
+	CONTACTOR="contactor:"
+)
+
+//添加用户或者Id非零更新用户
+func (u *User) SaveOrUpdate() error{
+	//判断Id是否为空
+	if u.Id <= 0{
+		ic:=client.Incr(SEQ)
+		u.Id=ic.Val()
+	}
+
+	//使用事务管道，节省网络开支
+	pipeline:=client.TxPipeline()
+	//保存对象
+	pipeline.HSet(PREFIX+fmt.Sprintf("%d",u.Id),"UserName",u.Username)
+	pipeline.HSet(PREFIX+fmt.Sprintf("%d",u.Id),"Password",u.Password)
+	pipeline.HSet(PREFIX+fmt.Sprintf("%d",u.Id),"Email",u.Email)
+	pipeline.HSet(PREFIX+fmt.Sprintf("%d",u.Id),"Company",u.Company)
+
+	//保存un2id、email2id映射关系
+	pipeline.HSet(UN2ID,u.Username,u.Id)
+	pipeline.HSet(EMAIL2ID,u.Email,u.Id)
+
+	_,err:=pipeline.Exec()
+
+	return err
+}
+
+func (u *User) Del() error{
+	if u.Id <= 0 {
+		return errors.New("Id值异常，未执行删除操作")
+	}
+	client.Del(PREFIX+fmt.Sprintf("%d",u.Id))
+	return nil
+}
+
+func (u *User) Load() error{
+	var user User
+	var err error
+
+	//加载用户
+	if u.Id >0 {
+		user,err = LoadUserById(u.Id)
+	}else if u.Username != "" {
+		user,err = LoadUserByUN(u.Username)
+	}else if u.Email != "" {
+		user,err = LoadUserByEmail(u.Email)
+	}
+
+	if err!=nil{
+		return err
+	}
+
+	*u = user
+	return nil
+}
+
+//通过Email查询User
+func LoadUserById(id int64) (User,error){
+	ssm:=client.HGetAll(PREFIX+fmt.Sprintf("%d",id))
+
+	if ssm.Err() != nil {
+		return User{},ssm.Err()
+	}
+	//回填Id
+	u,err := mapUser(ssm.Val())
+	u.Id=id
+	return u,err
+}
+
+//通过userName查询User
+func LoadUserByUN(userName string) (User,error) {
+	sc:=client.HGet(UN2ID,userName)
+	ssm := client.HGetAll(PREFIX+sc.Val())
+
+	if ssm.Err() != nil {
+		return User{},ssm.Err()
+	}
+
+	u,err:=mapUser(ssm.Val())
+	//回填Id
+	i,err := strconv.ParseInt(sc.Val(),10,64)
+	if err!=nil {
+		return u, err
+	}
+	u.Id=i
+
+	return u,err
+}
+
+//通过Email查询User
+func LoadUserByEmail(email string) (User,error){
+	sc:=client.HGet(EMAIL2ID,email)
+	ssm := client.HGetAll(PREFIX+sc.Val())
+
+	if ssm.Err() != nil {
+		return User{},ssm.Err()
+	}
+
+	u,err:=mapUser(ssm.Val())
+	//回填Id
+	i,err := strconv.ParseInt(sc.Val(),10,64)
+	if err!=nil {
+		return u, err
+	}
+	u.Id=i
+
+	return u,err
+}
+
+//映射查询结果
+func mapUser(m map[string]string) (User,error){
+	u := User{}
+
+	u.Username=m["UserName"]
+	u.Password=m["Password"]
+	u.Email=m["Email"]
+	u.Company=m["Company"]
+
+	return u,nil
 }

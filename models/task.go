@@ -5,7 +5,7 @@ import "time"
 //Task 任务条目
 //redis存储结构
 //task:[id] - hash
-//
+//task:seq - string Id序列值
 type Task struct {
 	Id int64
 	Name string

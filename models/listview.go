@@ -7,5 +7,5 @@ package models
 //listview:[Id] - list 任务集合
 type Listview struct {
 	Id int64
-	Items []Item
+	Tasks []Task
 }
