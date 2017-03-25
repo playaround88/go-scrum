@@ -25,8 +25,8 @@ type User struct {
 }
 
 const (
-	PREFIX="user:"
-	SEQ=PREFIX+"seq"
+	USER_PREFIX="user:"
+	USER_SEQ=USER_PREFIX+"seq"
 	UN2ID="un2id"
 	EMAIL2ID="email2id"
 
@@ -37,17 +37,17 @@ const (
 func (u *User) SaveOrUpdate() error{
 	//判断Id是否为空
 	if u.Id <= 0{
-		ic:=client.Incr(SEQ)
+		ic:=client.Incr(USER_SEQ)
 		u.Id=ic.Val()
 	}
 
 	//使用事务管道，节省网络开支
 	pipeline:=client.TxPipeline()
 	//保存对象
-	pipeline.HSet(PREFIX+fmt.Sprintf("%d",u.Id),"UserName",u.Username)
-	pipeline.HSet(PREFIX+fmt.Sprintf("%d",u.Id),"Password",u.Password)
-	pipeline.HSet(PREFIX+fmt.Sprintf("%d",u.Id),"Email",u.Email)
-	pipeline.HSet(PREFIX+fmt.Sprintf("%d",u.Id),"Company",u.Company)
+	pipeline.HSet(USER_PREFIX+fmt.Sprintf("%d",u.Id),"UserName",u.Username)
+	pipeline.HSet(USER_PREFIX+fmt.Sprintf("%d",u.Id),"Password",u.Password)
+	pipeline.HSet(USER_PREFIX+fmt.Sprintf("%d",u.Id),"Email",u.Email)
+	pipeline.HSet(USER_PREFIX+fmt.Sprintf("%d",u.Id),"Company",u.Company)
 
 	//保存un2id、email2id映射关系
 	pipeline.HSet(UN2ID,u.Username,u.Id)
@@ -62,8 +62,20 @@ func (u *User) Del() error{
 	if u.Id <= 0 {
 		return errors.New("Id值异常，未执行删除操作")
 	}
-	client.Del(PREFIX+fmt.Sprintf("%d",u.Id))
-	return nil
+	//注意这里要先加载，否则不能保证username email为空
+	u.Load()
+
+	//
+	pipeline := client.TxPipeline()
+
+	pipeline.Del(USER_PREFIX+fmt.Sprintf("%d",u.Id))
+	//删除映射
+	pipeline.HDel(UN2ID, u.Username)
+	pipeline.HDel(EMAIL2ID,u.Email)
+
+	_,err:=pipeline.Exec()
+
+	return err
 }
 
 func (u *User) Load() error{
@@ -89,7 +101,7 @@ func (u *User) Load() error{
 
 //通过Email查询User
 func LoadUserById(id int64) (User,error){
-	ssm:=client.HGetAll(PREFIX+fmt.Sprintf("%d",id))
+	ssm:=client.HGetAll(USER_PREFIX+fmt.Sprintf("%d",id))
 
 	if ssm.Err() != nil {
 		return User{},ssm.Err()
@@ -103,7 +115,7 @@ func LoadUserById(id int64) (User,error){
 //通过userName查询User
 func LoadUserByUN(userName string) (User,error) {
 	sc:=client.HGet(UN2ID,userName)
-	ssm := client.HGetAll(PREFIX+sc.Val())
+	ssm := client.HGetAll(USER_PREFIX+sc.Val())
 
 	if ssm.Err() != nil {
 		return User{},ssm.Err()
@@ -123,7 +135,7 @@ func LoadUserByUN(userName string) (User,error) {
 //通过Email查询User
 func LoadUserByEmail(email string) (User,error){
 	sc:=client.HGet(EMAIL2ID,email)
-	ssm := client.HGetAll(PREFIX+sc.Val())
+	ssm := client.HGetAll(USER_PREFIX+sc.Val())
 
 	if ssm.Err() != nil {
 		return User{},ssm.Err()
