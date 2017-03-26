@@ -36,6 +36,9 @@ func (p *Project) SaveOrUpdate() error{
 	//如果Id不存在，则为新添加
 	if p.Id <= 0 {
 		i:=client.Incr(PROJECT_SEQ)
+		if ic.Err() != nil {
+			return ic.Err()
+		}
 		p.Id=i.Val()
 	}
 	//pipeline，节省网络开销

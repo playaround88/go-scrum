@@ -37,6 +37,9 @@ func (u *User) SaveOrUpdate() error{
 	//判断Id是否为空
 	if u.Id <= 0{
 		ic:=client.Incr(USER_SEQ)
+		if ic.Err() != nil {
+			return ic.Err()
+		}
 		u.Id=ic.Val()
 	}
 

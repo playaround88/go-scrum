@@ -34,6 +34,9 @@ const (
 func (b *Board) SaveOrUpdate() error{
 	if b.Id <= 0 {
 		ic := client.Incr(BOARD_SEQ)
+		if ic.Err() != nil {
+			return ic.Err()
+		}
 		b.Id = ic.Val()
 	}
 
