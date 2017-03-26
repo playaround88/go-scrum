@@ -3,7 +3,6 @@ package models
 import (
 	"fmt"
 	"github.com/pkg/errors"
-	"strconv"
 )
 
 //User 系统用户
@@ -79,87 +78,61 @@ func (u *User) Del() error{
 }
 
 func (u *User) Load() error{
-	var user User
 	var err error
 
 	//加载用户
 	if u.Id >0 {
-		user,err = LoadUserById(u.Id)
+		err = LoadUserById(u)
 	}else if u.Username != "" {
-		user,err = LoadUserByUN(u.Username)
+		err = LoadUserByUN(u)
 	}else if u.Email != "" {
-		user,err = LoadUserByEmail(u.Email)
+		err = LoadUserByEmail(u)
 	}
 
-	if err!=nil{
-		return err
-	}
-
-	*u = user
-	return nil
+	return err
 }
 
 //通过Email查询User
-func LoadUserById(id int64) (User,error){
-	ssm:=client.HGetAll(USER_PREFIX+fmt.Sprintf("%d",id))
+func LoadUserById(u *User) error{
+	ssm:=client.HGetAll(USER_PREFIX+fmt.Sprintf("%d",u.Id))
 
 	if ssm.Err() != nil {
-		return User{},ssm.Err()
+		return ssm.Err()
 	}
-	//回填Id
-	u,err := mapUser(ssm.Val())
-	u.Id=id
-	return u,err
+
+	return mapUser(u,ssm.Val())
 }
 
 //通过userName查询User
-func LoadUserByUN(userName string) (User,error) {
-	sc:=client.HGet(UN2ID,userName)
+func LoadUserByUN(u *User) error {
+	sc:=client.HGet(UN2ID,u.Username)
 	ssm := client.HGetAll(USER_PREFIX+sc.Val())
 
 	if ssm.Err() != nil {
-		return User{},ssm.Err()
+		return ssm.Err()
 	}
 
-	u,err:=mapUser(ssm.Val())
-	//回填Id
-	i,err := strconv.ParseInt(sc.Val(),10,64)
-	if err!=nil {
-		return u, err
-	}
-	u.Id=i
-
-	return u,err
+	return mapUser(u,ssm.Val())
 }
 
 //通过Email查询User
-func LoadUserByEmail(email string) (User,error){
-	sc:=client.HGet(EMAIL2ID,email)
+func LoadUserByEmail(u *User) error{
+	sc:=client.HGet(EMAIL2ID,u.Email)
 	ssm := client.HGetAll(USER_PREFIX+sc.Val())
 
 	if ssm.Err() != nil {
-		return User{},ssm.Err()
+		return ssm.Err()
 	}
 
-	u,err:=mapUser(ssm.Val())
-	//回填Id
-	i,err := strconv.ParseInt(sc.Val(),10,64)
-	if err!=nil {
-		return u, err
-	}
-	u.Id=i
-
-	return u,err
+	return mapUser(u,ssm.Val())
 }
 
 //映射查询结果
-func mapUser(m map[string]string) (User,error){
-	u := User{}
-
+func mapUser(u *User, m map[string]string) error{
 	u.Username=m["UserName"]
 	u.Password=m["Password"]
 	u.Email=m["Email"]
 	u.Company=m["Company"]
 
-	return u,nil
+	return nil
 }

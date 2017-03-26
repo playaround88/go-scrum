@@ -68,19 +68,18 @@ func (p *Project) Del() error {
 	}
 
 	//先加载，否则可能不能正常删除关联关系
-	err:=p.Load()
-	if err!= nil {
-		return err
+	if p.Creator <= 0 {
+		return errors.New("项目数据有异常，请检查Creator字段数据")
 	}
 
 	pipeline := client.TxPipeline()
 
 	pipeline.Del(PROJECT_PREFIX+fmt.Sprintf("%d"))
 	//删除关联关系
-	pipeline.LRem(USER_PROJECT,1,p.Id)
-	pipeline.LRem(USER_A_PROJECT,1,p.Id)
+	pipeline.LRem(USER_PROJECT+fmt.Sprintf("%d",p.Creator),1,p.Id)
+	pipeline.LRem(USER_A_PROJECT+fmt.Sprintf("%d",p.Creator),1,p.Id)
 
-	_,err = pipeline.Exec()
+	_,err := pipeline.Exec()
 
 	return err
 }
@@ -97,40 +96,28 @@ func (p *Project) Load() error{
 
 	m:=ssm.Val()
 
-	pr,err := mapProject(m)
-
-	if err!=nil {
-		return err
-	}
-
-	//回填和替换
-	pr.Id=p.Id
-	*p=pr
-
-	return nil
+	return mapProject(p,m)
 }
 
-func mapProject(m map[string]string) (Project, error) {
-	p:=Project{}
-
+func mapProject(p *Project, m map[string]string) error {
 	p.Name=m["Name"]
 	p.Desc=m["Desc"]
 	//创建人
 	uid,err:=strconv.ParseInt(m["Creator"],10,64)
 	if err != nil {
-		return p,err
+		return err
 	}
 	p.Creator=uid
 	//时间转换
 	int64Time,err := strconv.ParseInt(m["CreateTime"],10,64)
 	if err != nil {
-		return p,err
+		return err
 	}
 	p.CreateTime = time.Unix(int64Time,0)
 	//状态
 	p.State=m["State"]
 
-	return p,err
+	return nil
 }
 
 //Archive 项目归档
@@ -138,13 +125,17 @@ func (p *Project) Archive() error{
 	if p.State=="archived" {
 		return nil
 	}
+	//
+	if p.Id <= 0 || p.Creator <= 0 {
+		return errors.New("项目数据有异常，请检查Id和Creator字段数据")
+	}
 
 	p.State="archived"
 
 	pipeline:=client.TxPipeline()
 
-	pipeline.LRem(USER_PROJECT,1,p.Id)
-	pipeline.LPushX(USER_A_PROJECT, p.Id)
+	pipeline.LRem(USER_PROJECT+fmt.Sprintf("%d",p.Creator),1,p.Id)
+	pipeline.LPushX(USER_A_PROJECT+fmt.Sprintf("%d",p.Creator), p.Id)
 
 	_,err:=pipeline.Exec()
 
