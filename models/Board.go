@@ -11,8 +11,8 @@ import (
 //redis存储结构
 //board:[Id] - hash 对象存储
 //board:seq - string Id序列值
-//project_board:[project_id] - list 项目看板列表
-//project_a_board:[project_id] - list 项目已归档看板列表
+//project_board:[project_id] - set 项目看板列表
+//project_a_board:[project_id] - set 项目已归档看板列表
 type Board struct {
 	Id int64
 	Name string
@@ -49,9 +49,9 @@ func (b *Board) SaveOrUpdate() error{
 
 	//关联关系
 	if b.State == "archived" {
-		pipeline.LPush(PROJECT_A_BOARD, b.Id)
+		pipeline.SAdd(PROJECT_A_BOARD, b.Id)
 	}else {
-		pipeline.LPush(PROJECT_BOARD,b.Id)
+		pipeline.SAdd(PROJECT_BOARD,b.Id)
 	}
 	//执行
 	_,err := pipeline.Exec()
@@ -68,8 +68,8 @@ func (b *Board) Del() error{
 
 	pipeline.Del(BOARD_PREFIX+fmt.Sprintf("%d",b.Id))
 	//删除关联
-	pipeline.LRem(PROJECT_BOARD+fmt.Sprintf("%d",b.ProjectId), 1, fmt.Sprintf("%d",b.Id))
-	pipeline.LRem(PROJECT_A_BOARD+fmt.Sprintf("%d",b.ProjectId), 1, fmt.Sprintf("%d",b.Id))
+	pipeline.SRem(PROJECT_BOARD+fmt.Sprintf("%d",b.ProjectId), fmt.Sprintf("%d",b.Id))
+	pipeline.SRem(PROJECT_A_BOARD+fmt.Sprintf("%d",b.ProjectId), fmt.Sprintf("%d",b.Id))
 
 	_,err := pipeline.Exec()
 

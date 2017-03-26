@@ -11,8 +11,8 @@ import (
 //redis存储结构
 //task:[id] - hash
 //task:seq - string Id序列值
-//lv_task:[lvId] - list listview与任务列表
-//lane_task:[lvId] - list 泳道任务列表
+//lv_task:[lvId] - set listview与任务列表
+//lane_task:[lvId] - set 泳道任务列表
 type Task struct {
 	Id int64
 	Name string
@@ -57,8 +57,8 @@ func (t *Task) SaveOrUpdate() error {
 	pipeline.HSet(TASK_PRFIX + fmt.Sprintf("%d",t.Id),"EndTime", fmt.Sprintf("%d",t.EndTime.Unix()))
 	pipeline.HSet(TASK_PRFIX + fmt.Sprintf("%d",t.Id),"Attachement", t.Attachement)
 	//关联关系
-	pipeline.LPush(LV_TASK+fmt.Sprintf("%d",t.ListviewId), fmt.Sprintf("%d",t.Id))
-	pipeline.LPush(LANE_TASK+fmt.Sprintf("%d",t.LaneId), fmt.Sprintf("%d",t.Id))
+	pipeline.SAdd(LV_TASK+fmt.Sprintf("%d",t.ListviewId), fmt.Sprintf("%d",t.Id))
+	pipeline.SAdd(LANE_TASK+fmt.Sprintf("%d",t.LaneId), fmt.Sprintf("%d",t.Id))
 
 	_,err := pipeline.Exec()
 
@@ -72,8 +72,8 @@ func (t *Task) Del() error{
 	}
 	pipeline := client.TxPipeline()
 	pipeline.Del(TASK_PRFIX + fmt.Sprintf("%d",t.Id))
-	pipeline.LRem(LV_TASK+fmt.Sprintf("%d",t.ListviewId),1,fmt.Sprintf("%d",t.Id))
-	pipeline.LRem(LANE_TASK+fmt.Sprintf("%d",t.ListviewId),1,fmt.Sprintf("%d",t.Id))
+	pipeline.SRem(LV_TASK+fmt.Sprintf("%d",t.ListviewId),fmt.Sprintf("%d",t.Id))
+	pipeline.SRem(LANE_TASK+fmt.Sprintf("%d",t.ListviewId),fmt.Sprintf("%d",t.Id))
 
 	_,err := pipeline.Exec()
 	return err
@@ -126,9 +126,9 @@ func mapTask(t *Task, m map[string]string) error {
 	return err
 }
 
-func QueryTaskByLV(lvId, start, end int64) ([]Task,error) {
+func QueryTaskByLV(lvId int64) ([]Task,error) {
 	var tasks []Task
-	ssc :=client.LRange(LV_TASK+fmt.Sprintf("%d",lvId),start,end)
+	ssc :=client.SMembers(LV_TASK+fmt.Sprintf("%d",lvId))
 	if ssc.Err() != nil {
 		return tasks,ssc.Err()
 	}
@@ -151,9 +151,9 @@ func QueryTaskByLV(lvId, start, end int64) ([]Task,error) {
 	return tasks,nil
 }
 
-func QueryTaskByLane(laneId, start, end int64) ([]Task,error) {
+func QueryTaskByLane(laneId int64) ([]Task,error) {
 	var tasks []Task
-	ssc :=client.LRange(LANE_TASK+fmt.Sprintf("%d",lvId),start,end)
+	ssc :=client.SMembers(LANE_TASK+fmt.Sprintf("%d",laneId))
 	if ssc.Err() != nil {
 		return tasks,ssc.Err()
 	}

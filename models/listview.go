@@ -10,7 +10,7 @@ import (
 //redis 存储结构
 //listview:[Id] - listview
 //listview:seq - string Id序列值
-//board-listview:[board_id] -list 看板任务列表（有序）
+//board-listview:[board_id] -set 看板任务列表（有序）
 
 type Listview struct {
 	Id int64
@@ -37,7 +37,7 @@ func (lv *Listview) SaveOrUpdate() error {
 
 	pipeline.HSet(LV_PREFIX+fmt.Sprintf("%d",lv.Id),"BoardId", fmt.Sprintf("%d", lv.BoardId))
 	//关联关系
-	pipeline.LPush(BOARD_LV+fmt.Sprintf("%d", lv.BoardId),fmt.Sprintf("%d",lv.Id))
+	pipeline.SAdd(BOARD_LV+fmt.Sprintf("%d", lv.BoardId),fmt.Sprintf("%d",lv.Id))
 
 	_,err := pipeline.Exec()
 
@@ -53,7 +53,7 @@ func (lv *Listview) Del() error {
 
 	pipeline.Del(LV_PREFIX+fmt.Sprintf("%d",lv.Id))
 
-	pipeline.LRem(BOARD_LV+fmt.Sprintf("%d", lv.BoardId),1,fmt.Sprintf("%d",lv.Id))
+	pipeline.SRem(BOARD_LV+fmt.Sprintf("%d", lv.BoardId),fmt.Sprintf("%d",lv.Id))
 
 	_,err := pipeline.Exec()
 

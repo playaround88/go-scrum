@@ -11,7 +11,7 @@ import (
 //redis存储结构
 //comment:[id] - hash
 //comment:seq - string Id序列
-//task_comment:[task_id] - list 任务评论列表
+//task_comment:[task_id] - set 任务评论列表
 type Comment struct {
 	Id int64
 	UserId int64
@@ -44,7 +44,7 @@ func (cm *Comment) SaveOrUpdate() error {
 	pipeline.HSet(CM_PREFIX+fmt.Sprintf("%d",cm.Id),"Content", cm.Content)
 	pipeline.HSet(CM_PREFIX+fmt.Sprintf("%d",cm.Id),"CreateTime", cm.CreateTime.Unix())
 	//
-	pipeline.LPush(TASK_COMMENT+fmt.Sprintf("%d",cm.TaskId),fmt.Sprintf("%d",cm.Id))
+	pipeline.SAdd(TASK_COMMENT+fmt.Sprintf("%d",cm.TaskId),fmt.Sprintf("%d",cm.Id))
 
 	_,err := pipeline.Exec()
 
@@ -59,7 +59,7 @@ func (cm *Comment) Del() error{
 	pipeline := client.TxPipeline()
 
 	pipeline.Del(CM_PREFIX+fmt.Sprintf("%d",cm.Id))
-	pipeline.LRem(TASK_COMMENT+fmt.Sprintf("%d",cm.TaskId),1,fmt.Sprintf("%d",cm.Id))
+	pipeline.SRem(TASK_COMMENT+fmt.Sprintf("%d",cm.TaskId),fmt.Sprintf("%d",cm.Id))
 
 	_,err := pipeline.Exec()
 
@@ -107,9 +107,9 @@ func mapComment(cm *Comment, m map[string]string) error {
 	return err
 }
 
-func QueryCommentByTask(tid int64, start, end int64) ([]Comment,error) {
+func QueryCommentByTask(tid int64) ([]Comment,error) {
 	var cms []Comment
-	ssc := client.LRange(TASK_COMMENT+fmt.Sprintf("%d",tid),start, end)
+	ssc := client.SMembers(TASK_COMMENT+fmt.Sprintf("%d",tid))
 	if ssc.Err() != nil {
 		return cms,ssc.Err()
 	}

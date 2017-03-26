@@ -12,8 +12,8 @@ import (
 //redis存储结构
 //project:[Id] - hash 对象存储
 //project:seq - string Id序列值
-//user_projects:[user_id] - list 用户项目列表
-//user_a_projects:[user_id] -list 用户已归档项目列表
+//user_projects:[user_id] - set 用户项目列表
+//user_a_projects:[user_id] -set 用户已归档项目列表
 type Project struct {
 	Id int64
 	Name string
@@ -35,11 +35,11 @@ const (
 func (p *Project) SaveOrUpdate() error{
 	//如果Id不存在，则为新添加
 	if p.Id <= 0 {
-		i:=client.Incr(PROJECT_SEQ)
+		ic:=client.Incr(PROJECT_SEQ)
 		if ic.Err() != nil {
 			return ic.Err()
 		}
-		p.Id=i.Val()
+		p.Id=ic.Val()
 	}
 	//pipeline，节省网络开销
 	pipeline := client.Pipeline()
@@ -58,7 +58,7 @@ func (p *Project) SaveOrUpdate() error{
 	}
 
 	//关联关系
-	pipeline.LPushX(USER_PROJECT+fmt.Sprintf("%d",p.Creator),fmt.Sprintf("%d",p.Id))
+	pipeline.SAdd(USER_PROJECT+fmt.Sprintf("%d",p.Creator),fmt.Sprintf("%d",p.Id))
 
 	_,err:=pipeline.Exec()
 	return err
@@ -79,8 +79,8 @@ func (p *Project) Del() error {
 
 	pipeline.Del(PROJECT_PREFIX+fmt.Sprintf("%d"))
 	//删除关联关系
-	pipeline.LRem(USER_PROJECT+fmt.Sprintf("%d",p.Creator),1,p.Id)
-	pipeline.LRem(USER_A_PROJECT+fmt.Sprintf("%d",p.Creator),1,p.Id)
+	pipeline.SRem(USER_PROJECT+fmt.Sprintf("%d",p.Creator),1,p.Id)
+	pipeline.SRem(USER_A_PROJECT+fmt.Sprintf("%d",p.Creator),1,p.Id)
 
 	_,err := pipeline.Exec()
 
@@ -135,26 +135,23 @@ func (p *Project) Archive() error{
 
 	p.State="archived"
 
-	pipeline:=client.TxPipeline()
+	bc := client.SMove(USER_PROJECT+fmt.Sprintf("%d",p.Creator),
+		USER_A_PROJECT+fmt.Sprintf("%d",p.Creator),
+		fmt.Sprintf("%d",p.Id))
 
-	pipeline.LRem(USER_PROJECT+fmt.Sprintf("%d",p.Creator),1,p.Id)
-	pipeline.LPushX(USER_A_PROJECT+fmt.Sprintf("%d",p.Creator), p.Id)
-
-	_,err:=pipeline.Exec()
-
-	return err
+	return bc.Err()
 }
 
-func QueryProjectsByUser(userId int64) []Project {
-	uid:=fmt.Sprintf("%d",userId)
-
-	ic:=client.LLen(USER_A_PROJECT+uid)
-	len := ic.Val()
-
-	ssc:=client.LRange(USER_A_PROJECT+uid,0,len)
-	projectIds:=ssc.Val()
-
+func QueryProjectsByUser(userId int64) ([]Project,error) {
 	var projects []Project
+
+	uid:=fmt.Sprintf("%d",userId)
+	ssc:=client.SMembers(USER_PROJECT+uid)
+	if ssc.Err() != nil {
+		return projects, ssc.Err()
+	}
+
+	projectIds:=ssc.Val()
 
 	for _, projectId := range projectIds {
 		//初始化project
@@ -169,19 +166,19 @@ func QueryProjectsByUser(userId int64) []Project {
 		projects=append(projects,project)
 	}
 
-	return projects
+	return projects,nil
 }
 
-func QueryAProjectsByUser(userId string) []Project{
-	uid:=fmt.Sprintf("%d",userId)
-
-	ic:=client.LLen(USER_A_PROJECT+uid)
-	len := ic.Val()
-
-	ssc:=client.LRange(USER_A_PROJECT+uid,0,len)
-	projectIds:=ssc.Val()
-
+func QueryAProjectsByUser(userId string) ([]Project,error){
 	var projects []Project
+
+	uid:=fmt.Sprintf("%d",userId)
+	ssc:=client.SMembers(USER_A_PROJECT+uid)
+	if ssc.Err() != nil {
+		return projects, ssc.Err()
+	}
+
+	projectIds:=ssc.Val()
 
 	for _, projectId := range projectIds {
 		//初始化project
@@ -196,5 +193,5 @@ func QueryAProjectsByUser(userId string) []Project{
 		projects=append(projects,project)
 	}
 
-	return projects
+	return projects,nil
 }
